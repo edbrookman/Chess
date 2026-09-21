@@ -9,11 +9,11 @@
 <style>
   :root{
     --bg:#faf9f7; --panel:#fff; --ink:#1c1b19; --muted:#6b6862; --line:#e3e0da;
-    --light:#ebe6dd; --dark:#a9997f; --accent:#4a6fa5; --hl:#c8d49a;
+    --light:#eadfc8; --dark:#ad8968; --accent:#4a6fa5; --hl:rgba(205,210,106,.45); --sel:rgba(74,111,165,.38);
   }
   @media (prefers-color-scheme:dark){:root:not([data-theme=light]){
     --bg:#16171a; --panel:#1f2126; --ink:#eceae6; --muted:#9a968e; --line:#2f323a;
-    --light:#b9b2a4; --dark:#6f6552; --accent:#87a8d8; --hl:#7f8c55;
+    --light:#c8bca4; --dark:#7d6448; --accent:#87a8d8; --hl:rgba(150,160,80,.45); --sel:rgba(135,168,216,.4);
   }}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
@@ -24,17 +24,32 @@
   .layout{display:grid;gap:20px;grid-template-columns:minmax(0,1fr) 250px;align-items:start}
   @media (max-width:720px){.layout{grid-template-columns:1fr}}
   .boardwrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
-  #board{display:grid;grid-template-columns:repeat(8,1fr);aspect-ratio:1;
-    border-radius:6px;overflow:hidden;user-select:none;touch-action:manipulation}
-  .sq{display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;
-    font-size:min(7.2vw,44px);line-height:1}
+  #board{container-type:inline-size;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);
+    aspect-ratio:1;border-radius:8px;overflow:hidden;user-select:none;
+    touch-action:manipulation;box-shadow:0 1px 3px rgba(0,0,0,.14),0 8px 24px rgba(0,0,0,.08)}
+  .sq{position:relative;aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;-webkit-tap-highlight-color:transparent}
   .sq.l{background:var(--light)} .sq.d{background:var(--dark)}
-  .sq.sel{box-shadow:inset 0 0 0 3px var(--accent)}
-  .sq.last{background:var(--hl)}
-  .sq .dot{position:absolute;width:26%;height:26%;border-radius:50%;
-    background:rgba(0,0,0,.22);pointer-events:none}
-  .piece{color:#111;text-shadow:0 0 1px #fff,0 1px 2px rgba(0,0,0,.35)}
-  .piece.b{color:#111} .piece.w{color:#fff;text-shadow:0 0 1px #000,0 1px 2px rgba(0,0,0,.45)}
+  .sq::after{content:"";position:absolute;inset:0;background:transparent;
+    transition:background .12s;pointer-events:none}
+  .sq.last::after{background:var(--hl)}
+  .sq.sel::after{background:var(--sel)}
+  .sq.chk::after{background:radial-gradient(circle,rgba(200,40,40,.72) 12%,transparent 72%)}
+  @media (hover:hover){.sq.can:hover::after{background:rgba(255,255,255,.16)}}
+  .piece{position:relative;z-index:2;font-size:9.2cqw;line-height:1;pointer-events:none;
+    font-family:"Apple Symbols","Segoe UI Symbol","Noto Sans Symbols 2",
+      "DejaVu Sans",system-ui,sans-serif}
+  .piece.w{color:#fcfcfa;
+    text-shadow:0 0 1.5px #2a2724,0 0 1.5px #2a2724,0 0 1.5px #2a2724,0 2px 3px rgba(0,0,0,.4)}
+  .piece.b{color:#26231f;
+    text-shadow:0 0 1px rgba(255,255,255,.45),0 2px 3px rgba(0,0,0,.35)}
+  .sq .dot{position:absolute;z-index:1;width:28%;height:28%;border-radius:50%;
+    background:rgba(20,18,15,.26);pointer-events:none}
+  .sq .ring{position:absolute;z-index:1;inset:6%;border-radius:50%;
+    border:.28em solid rgba(20,18,15,.26);pointer-events:none}
+  .coord{position:absolute;z-index:3;font-size:9.5px;font-weight:600;opacity:.5;
+    pointer-events:none;letter-spacing:.02em}
+  .coord.f{right:3px;bottom:1px} .coord.r{left:3px;top:1px}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
   .panel h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;
     color:var(--muted);margin:0 0 10px;font-weight:600}
@@ -46,7 +61,9 @@
   input[type=range]{width:100%;accent-color:var(--accent)}
   .row{display:flex;gap:8px;margin-top:12px}
   #status{margin-top:12px;font-size:.87rem;color:var(--muted);min-height:2.4em}
-  .bar{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:8px}
+  .bar{height:4px;background:var(--line);border-radius:2px;overflow:hidden;
+    margin-top:8px;display:none}
+  .bar.on{display:block}
   .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
   .moves{font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);
     max-height:150px;overflow:auto;margin-top:12px;white-space:pre-wrap}
@@ -114,25 +131,39 @@ function squares() {
 function render() {
   const board = {};
   for (const row of chess.board()) for (const p of row) if (p) board[p.square] = p;
-  const targets = sel ? new Set(chess.moves({ square: sel, verbose: true }).map(m => m.to)) : new Set();
+  const moves = sel ? chess.moves({ square: sel, verbose: true }) : [];
+  const targets = new Map(moves.map(m => [m.to, m.flags.includes("c") || m.flags.includes("e")]));
+  const inCheck = chess.inCheck();
+  const turn = chess.turn();
+  const list = squares();
   boardEl.innerHTML = "";
-  for (const sq of squares()) {
+  list.forEach((sq, i) => {
     const file = sq.charCodeAt(0) - 97, rank = Number(sq[1]) - 1;
     const d = document.createElement("div");
     d.className = "sq " + ((file + rank) % 2 ? "l" : "d");
+    const p = board[sq];
     if (sq === sel) d.classList.add("sel");
     if (last && (sq === last.from || sq === last.to)) d.classList.add("last");
-    const p = board[sq];
+    if (inCheck && p && p.type === "k" && p.color === turn) d.classList.add("chk");
+    if (p && p.color === human && chess.turn() === human) d.classList.add("can");
     if (p) {
-      const s = document.createElement("span");
-      s.className = "piece " + p.color;
-      s.textContent = GLYPH[p.type];
-      d.appendChild(s);
+      const s2 = document.createElement("span");
+      s2.className = "piece " + p.color;
+      s2.textContent = GLYPH[p.type];
+      d.appendChild(s2);
     }
-    if (targets.has(sq)) { const o = document.createElement("i"); o.className = "dot"; d.appendChild(o); }
+    if (targets.has(sq)) {
+      const o = document.createElement("i");
+      o.className = targets.get(sq) ? "ring" : "dot";
+      d.appendChild(o);
+    }
+    if (i >= 56) { const c = document.createElement("span");
+      c.className = "coord f"; c.textContent = sq[0]; d.appendChild(c); }
+    if (i % 8 === 0) { const c = document.createElement("span");
+      c.className = "coord r"; c.textContent = sq[1]; d.appendChild(c); }
     d.onclick = () => click(sq);
     boardEl.appendChild(d);
-  }
+  });
   $("moves").textContent = chess.history().map((m,i) =>
     (i % 2 ? "" : `${i/2+1}. `) + m).join(" ");
 }
@@ -193,10 +224,10 @@ $("alpha").oninput = e => $("alphav").textContent = (+e.target.value).toFixed(2)
   render();
   await engine.loadLight();
   say("Your move. Opening book ready; model downloading…");
-  await engine.loadModel(p => {
-    $("prog").style.width = (p*100).toFixed(0) + "%";
-    if (p >= 1) setTimeout(() => $("prog").style.width = "0", 600);
-  });
+  const bar = document.querySelector(".bar");
+  bar.classList.add("on");
+  await engine.loadModel(p => { $("prog").style.width = (p*100).toFixed(0) + "%"; });
+  setTimeout(() => bar.classList.remove("on"), 500);
   say("Ready.");
 })();
 </script>
