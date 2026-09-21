@@ -13,10 +13,13 @@
     --hl:rgba(205,210,106,.45); --sel:rgba(74,111,165,.38);
   }
   *{box-sizing:border-box}
-  html,body{background:#fff}
-  body{margin:0;color:var(--ink);
+  /* The board sizes itself to the SMALLER of the available width and height, so
+     the page fits whatever box Google Sites gives the iframe and never scrolls. */
+  html,body{height:100%;background:#fff;overflow:hidden}
+  body{margin:0;color:var(--ink);display:flex;align-items:center;justify-content:center;
     font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-  .wrap{max-width:560px;margin:0 auto;padding:8px 10px 16px}
+  .wrap{padding:8px;width:100%;display:flex;justify-content:center}
+  .stage{width:min(100% - 16px, calc(100dvh - 74px), 620px);display:flex;flex-direction:column}
 
   #board{container-type:inline-size;display:grid;
     grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);
@@ -43,18 +46,22 @@
   .coord{position:absolute;z-index:3;font-size:9.5px;font-weight:600;opacity:.5;letter-spacing:.02em}
   .coord.f{right:3px;bottom:1px} .coord.r{left:3px;top:1px}
 
-  .bar{display:flex;gap:8px;align-items:center;margin-top:10px}
+  .bar{display:flex;gap:8px;align-items:center;margin-top:10px;min-width:0}
   select,button{font:inherit;padding:7px 12px;border-radius:7px;
     border:1px solid var(--line);background:#fff;color:var(--ink)}
   button{cursor:pointer;background:#3f6394;color:#fff;border-color:transparent;font-weight:600}
   button:hover{background:#35537d}
-  #status{margin-left:auto;font-size:.88rem;color:var(--muted);text-align:right}
-  #prog{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:8px;display:none}
+  #status{margin-left:auto;font-size:.88rem;color:var(--muted);text-align:right;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  @media (max-width:340px){#status{display:none}}
+  select,button{flex:0 0 auto}
+  #prog{height:3px;background:var(--line);border-radius:2px;overflow:hidden;
+    margin-top:6px;display:none}
   #prog.on{display:block} #prog i{display:block;height:100%;width:0;background:#3f6394}
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="wrap"><div class="stage">
   <div id="board"></div>
   <div class="bar">
     <select id="side"><option value="w">I play White</option><option value="b">I play Black</option></select>
@@ -62,7 +69,7 @@
     <span id="status"></span>
   </div>
   <div id="prog"><i></i></div>
-</div>
+</div></div>
 
 <script type="module">
 import { Chess } from "https://cdn.jsdelivr.net/npm/chess.js@1.0.0-beta.8/+esm";
