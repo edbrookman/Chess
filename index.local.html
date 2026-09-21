@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Play Edward</title>
+<link rel="icon" href="data:,">
+<script src="./vendor/ort.min.js"></script>
+<style>
+  :root{
+    --bg:#faf9f7; --panel:#fff; --ink:#1c1b19; --muted:#6b6862; --line:#e3e0da;
+    --light:#ebe6dd; --dark:#a9997f; --accent:#4a6fa5; --hl:#c8d49a;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+    --bg:#16171a; --panel:#1f2126; --ink:#eceae6; --muted:#9a968e; --line:#2f323a;
+    --light:#b9b2a4; --dark:#6f6552; --accent:#87a8d8; --hl:#7f8c55;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:900px;margin:0 auto;padding:24px 16px 48px}
+  h1{font-size:1.45rem;margin:0 0 2px;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:.9rem;margin:0 0 20px}
+  .layout{display:grid;gap:20px;grid-template-columns:minmax(0,1fr) 250px;align-items:start}
+  @media (max-width:720px){.layout{grid-template-columns:1fr}}
+  .boardwrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+  #board{display:grid;grid-template-columns:repeat(8,1fr);aspect-ratio:1;
+    border-radius:6px;overflow:hidden;user-select:none;touch-action:manipulation}
+  .sq{display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;
+    font-size:min(7.2vw,44px);line-height:1}
+  .sq.l{background:var(--light)} .sq.d{background:var(--dark)}
+  .sq.sel{box-shadow:inset 0 0 0 3px var(--accent)}
+  .sq.last{background:var(--hl)}
+  .sq .dot{position:absolute;width:26%;height:26%;border-radius:50%;
+    background:rgba(0,0,0,.22);pointer-events:none}
+  .piece{color:#111;text-shadow:0 0 1px #fff,0 1px 2px rgba(0,0,0,.35)}
+  .piece.b{color:#111} .piece.w{color:#fff;text-shadow:0 0 1px #000,0 1px 2px rgba(0,0,0,.45)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .panel h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--muted);margin:0 0 10px;font-weight:600}
+  label{display:block;font-size:.85rem;margin:12px 0 4px;color:var(--muted)}
+  select,button{font:inherit;width:100%;padding:7px 9px;border-radius:7px;
+    border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+  button{cursor:pointer;background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
+  button.ghost{background:var(--bg);color:var(--ink);border-color:var(--line);font-weight:500}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  .row{display:flex;gap:8px;margin-top:12px}
+  #status{margin-top:12px;font-size:.87rem;color:var(--muted);min-height:2.4em}
+  .bar{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:8px}
+  .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+  .moves{font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);
+    max-height:150px;overflow:auto;margin-top:12px;white-space:pre-wrap}
+  .tag{display:inline-block;font-size:.72rem;padding:1px 6px;border-radius:99px;
+    background:var(--line);color:var(--muted);margin-left:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Play Edward</h1>
+  <p class="sub">A chess bot trained on my own games — my opening book in front of a
+    personalised Maia-2. It plays the openings I play, at roughly the strength I play them.</p>
+
+  <div class="layout">
+    <div class="boardwrap">
+      <div id="board"></div>
+      <div id="status">Loading…</div>
+      <div class="bar"><i id="prog"></i></div>
+    </div>
+
+    <div class="panel">
+      <h2>Game</h2>
+      <label for="side">You play</label>
+      <select id="side"><option value="w">White</option><option value="b">Black</option></select>
+      <div class="row"><button id="new">New game</button></div>
+      <div class="row"><button id="undo" class="ghost">Undo</button></div>
+
+      <h2 style="margin-top:20px">Style</h2>
+      <label for="style">Personality</label>
+      <select id="style">
+        <option value="stock">As I actually play</option>
+        <option value="attacking">Attacking</option>
+        <option value="positional">Positional</option>
+        <option value="wild">Wild</option>
+      </select>
+      <label for="temp">Consistency <span id="tempv" class="tag">0.90</span></label>
+      <input type="range" id="temp" min="0.3" max="1.6" step="0.05" value="0.9">
+      <label for="alpha">Toward generic 2000 <span id="alphav" class="tag">0.00</span></label>
+      <input type="range" id="alpha" min="0" max="0.25" step="0.01" value="0">
+
+      <div class="moves" id="moves"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { Chess } from "./vendor/chess.js";
+import { Engine } from "./engine.js";
+
+const GLYPH = {p:"♟",n:"♞",b:"♝",r:"♜",q:"♛",k:"♚"};
+const $ = (id) => document.getElementById(id);
+const boardEl = $("board");
+
+let chess = new Chess(), engine = new Engine(), human = "w";
+let sel = null, last = null, busy = false;
+
+function squares() {
+  const out = [];
+  const ranks = human === "w" ? [8,7,6,5,4,3,2,1] : [1,2,3,4,5,6,7,8];
+  const files = human === "w" ? "abcdefgh" : "hgfedcba";
+  for (const r of ranks) for (const f of files) out.push(f + r);
+  return out;
+}
+
+function render() {
+  const board = {};
+  for (const row of chess.board()) for (const p of row) if (p) board[p.square] = p;
+  const targets = sel ? new Set(chess.moves({ square: sel, verbose: true }).map(m => m.to)) : new Set();
+  boardEl.innerHTML = "";
+  for (const sq of squares()) {
+    const file = sq.charCodeAt(0) - 97, rank = Number(sq[1]) - 1;
+    const d = document.createElement("div");
+    d.className = "sq " + ((file + rank) % 2 ? "l" : "d");
+    if (sq === sel) d.classList.add("sel");
+    if (last && (sq === last.from || sq === last.to)) d.classList.add("last");
+    const p = board[sq];
+    if (p) {
+      const s = document.createElement("span");
+      s.className = "piece " + p.color;
+      s.textContent = GLYPH[p.type];
+      d.appendChild(s);
+    }
+    if (targets.has(sq)) { const o = document.createElement("i"); o.className = "dot"; d.appendChild(o); }
+    d.onclick = () => click(sq);
+    boardEl.appendChild(d);
+  }
+  $("moves").textContent = chess.history().map((m,i) =>
+    (i % 2 ? "" : `${i/2+1}. `) + m).join(" ");
+}
+
+function say(t) { $("status").innerHTML = t; }
+
+function click(sq) {
+  if (busy || chess.turn() !== human || chess.isGameOver()) return;
+  const piece = chess.get(sq);
+  if (sel) {
+    const mv = chess.moves({ square: sel, verbose: true }).find(m => m.to === sq);
+    if (mv) {
+      chess.move({ from: sel, to: sq, promotion: "q" });
+      last = { from: sel, to: sq }; sel = null; render();
+      setTimeout(reply, 120);
+      return;
+    }
+  }
+  sel = (piece && piece.color === human) ? sq : null;
+  render();
+}
+
+async function reply() {
+  if (chess.isGameOver()) return finish();
+  busy = true;
+  const opts = { style: $("style").value, temperature: +$("temp").value, alpha: +$("alpha").value };
+  const { uci, source } = await engine.chooseMove(chess, opts);
+  if (!uci) { say("Still loading the model — one moment."); busy = false; return; }
+  const mv = chess.move({ from: uci.slice(0,2), to: uci.slice(2,4), promotion: uci[4] || "q" });
+  last = { from: mv.from, to: mv.to };
+  busy = false; render();
+  say(chess.isGameOver() ? "" : `Played <b>${mv.san}</b><span class="tag">${
+    source === "book" ? "my opening book" : "model"}</span>`);
+  if (chess.isGameOver()) finish();
+}
+
+function finish() {
+  const t = chess.isCheckmate() ? (chess.turn() === human ? "I win." : "You win.")
+    : chess.isDraw() ? "Draw." : "Game over.";
+  say(t);
+}
+
+function newGame() {
+  chess = new Chess(); human = $("side").value; sel = null; last = null;
+  render();
+  say(engine.ready ? "Your move." : "Your move — the model is still downloading, " +
+      "but my opening book can answer in the meantime.");
+  if (human === "b") setTimeout(reply, 200);
+}
+
+$("new").onclick = newGame;
+$("side").onchange = newGame;
+$("undo").onclick = () => { chess.undo(); chess.undo(); sel = null; last = null; render(); };
+$("temp").oninput = e => $("tempv").textContent = (+e.target.value).toFixed(2);
+$("alpha").oninput = e => $("alphav").textContent = (+e.target.value).toFixed(2);
+
+(async () => {
+  render();
+  await engine.loadLight();
+  say("Your move. Opening book ready; model downloading…");
+  await engine.loadModel(p => {
+    $("prog").style.width = (p*100).toFixed(0) + "%";
+    if (p >= 1) setTimeout(() => $("prog").style.width = "0", 600);
+  });
+  say("Ready.");
+})();
+</script>
+</body>
+</html>
