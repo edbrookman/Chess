@@ -8,25 +8,20 @@
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
 <style>
   :root{
-    --bg:#faf9f7; --panel:#fff; --ink:#1c1b19; --muted:#6b6862; --line:#e3e0da;
-    --light:#eadfc8; --dark:#ad8968; --accent:#4a6fa5; --hl:rgba(205,210,106,.45); --sel:rgba(74,111,165,.38);
+    --bg:#fff; --ink:#1c1b19; --muted:#6f6c66; --line:#e2dfd9;
+    --light:#eadfc8; --dark:#ad8968;
+    --hl:rgba(205,210,106,.45); --sel:rgba(74,111,165,.38);
   }
-  @media (prefers-color-scheme:dark){:root:not([data-theme=light]){
-    --bg:#16171a; --panel:#1f2126; --ink:#eceae6; --muted:#9a968e; --line:#2f323a;
-    --light:#c8bca4; --dark:#7d6448; --accent:#87a8d8; --hl:rgba(150,160,80,.45); --sel:rgba(135,168,216,.4);
-  }}
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);
+  html,body{background:#fff}
+  body{margin:0;color:var(--ink);
     font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-  .wrap{max-width:900px;margin:0 auto;padding:24px 16px 48px}
-  h1{font-size:1.45rem;margin:0 0 2px;letter-spacing:-.01em}
-  .sub{color:var(--muted);font-size:.9rem;margin:0 0 20px}
-  .layout{display:grid;gap:20px;grid-template-columns:minmax(0,1fr) 250px;align-items:start}
-  @media (max-width:720px){.layout{grid-template-columns:1fr}}
-  .boardwrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
-  #board{container-type:inline-size;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);
-    aspect-ratio:1;border-radius:8px;overflow:hidden;user-select:none;
-    touch-action:manipulation;box-shadow:0 1px 3px rgba(0,0,0,.14),0 8px 24px rgba(0,0,0,.08)}
+  .wrap{max-width:560px;margin:0 auto;padding:8px 10px 16px}
+
+  #board{container-type:inline-size;display:grid;
+    grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);
+    aspect-ratio:1;border-radius:6px;overflow:hidden;user-select:none;
+    touch-action:manipulation;box-shadow:0 1px 3px rgba(0,0,0,.13),0 6px 18px rgba(0,0,0,.07)}
   .sq{position:relative;aspect-ratio:1;display:flex;align-items:center;justify-content:center;
     cursor:pointer;-webkit-tap-highlight-color:transparent}
   .sq.l{background:var(--light)} .sq.d{background:var(--dark)}
@@ -37,76 +32,36 @@
   .sq.chk::after{background:radial-gradient(circle,rgba(200,40,40,.72) 12%,transparent 72%)}
   @media (hover:hover){.sq.can:hover::after{background:rgba(255,255,255,.16)}}
   .piece{position:relative;z-index:2;font-size:9.2cqw;line-height:1;pointer-events:none;
-    font-family:"Apple Symbols","Segoe UI Symbol","Noto Sans Symbols 2",
-      "DejaVu Sans",system-ui,sans-serif}
+    font-family:"Apple Symbols","Segoe UI Symbol","Noto Sans Symbols 2","DejaVu Sans",system-ui,sans-serif}
   .piece.w{color:#fcfcfa;
     text-shadow:0 0 1.5px #2a2724,0 0 1.5px #2a2724,0 0 1.5px #2a2724,0 2px 3px rgba(0,0,0,.4)}
-  .piece.b{color:#26231f;
-    text-shadow:0 0 1px rgba(255,255,255,.45),0 2px 3px rgba(0,0,0,.35)}
+  .piece.b{color:#26231f;text-shadow:0 0 1px rgba(255,255,255,.45),0 2px 3px rgba(0,0,0,.35)}
   .sq .dot{position:absolute;z-index:1;width:28%;height:28%;border-radius:50%;
-    background:rgba(20,18,15,.26);pointer-events:none}
+    background:rgba(20,18,15,.26)}
   .sq .ring{position:absolute;z-index:1;inset:6%;border-radius:50%;
-    border:.28em solid rgba(20,18,15,.26);pointer-events:none}
-  .coord{position:absolute;z-index:3;font-size:9.5px;font-weight:600;opacity:.5;
-    pointer-events:none;letter-spacing:.02em}
+    border:.28em solid rgba(20,18,15,.26)}
+  .coord{position:absolute;z-index:3;font-size:9.5px;font-weight:600;opacity:.5;letter-spacing:.02em}
   .coord.f{right:3px;bottom:1px} .coord.r{left:3px;top:1px}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
-  .panel h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;
-    color:var(--muted);margin:0 0 10px;font-weight:600}
-  label{display:block;font-size:.85rem;margin:12px 0 4px;color:var(--muted)}
-  select,button{font:inherit;width:100%;padding:7px 9px;border-radius:7px;
-    border:1px solid var(--line);background:var(--bg);color:var(--ink)}
-  button{cursor:pointer;background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
-  button.ghost{background:var(--bg);color:var(--ink);border-color:var(--line);font-weight:500}
-  input[type=range]{width:100%;accent-color:var(--accent)}
-  .row{display:flex;gap:8px;margin-top:12px}
-  #status{margin-top:12px;font-size:.87rem;color:var(--muted);min-height:2.4em}
-  .bar{height:4px;background:var(--line);border-radius:2px;overflow:hidden;
-    margin-top:8px;display:none}
-  .bar.on{display:block}
-  .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
-  .moves{font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);
-    max-height:150px;overflow:auto;margin-top:12px;white-space:pre-wrap}
-  .tag{display:inline-block;font-size:.72rem;padding:1px 6px;border-radius:99px;
-    background:var(--line);color:var(--muted);margin-left:6px}
+
+  .bar{display:flex;gap:8px;align-items:center;margin-top:10px}
+  select,button{font:inherit;padding:7px 12px;border-radius:7px;
+    border:1px solid var(--line);background:#fff;color:var(--ink)}
+  button{cursor:pointer;background:#3f6394;color:#fff;border-color:transparent;font-weight:600}
+  button:hover{background:#35537d}
+  #status{margin-left:auto;font-size:.88rem;color:var(--muted);text-align:right}
+  #prog{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:8px;display:none}
+  #prog.on{display:block} #prog i{display:block;height:100%;width:0;background:#3f6394}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Play Edward</h1>
-  <p class="sub">A chess bot trained on my own games — my opening book in front of a
-    personalised Maia-2. It plays the openings I play, at roughly the strength I play them.</p>
-
-  <div class="layout">
-    <div class="boardwrap">
-      <div id="board"></div>
-      <div id="status">Loading…</div>
-      <div class="bar"><i id="prog"></i></div>
-    </div>
-
-    <div class="panel">
-      <h2>Game</h2>
-      <label for="side">You play</label>
-      <select id="side"><option value="w">White</option><option value="b">Black</option></select>
-      <div class="row"><button id="new">New game</button></div>
-      <div class="row"><button id="undo" class="ghost">Undo</button></div>
-
-      <h2 style="margin-top:20px">Style</h2>
-      <label for="style">Personality</label>
-      <select id="style">
-        <option value="stock">As I actually play</option>
-        <option value="attacking">Attacking</option>
-        <option value="positional">Positional</option>
-        <option value="wild">Wild</option>
-      </select>
-      <label for="temp">Consistency <span id="tempv" class="tag">0.90</span></label>
-      <input type="range" id="temp" min="0.3" max="1.6" step="0.05" value="0.9">
-      <label for="alpha">Toward generic 2000 <span id="alphav" class="tag">0.00</span></label>
-      <input type="range" id="alpha" min="0" max="0.25" step="0.01" value="0">
-
-      <div class="moves" id="moves"></div>
-    </div>
+  <div id="board"></div>
+  <div class="bar">
+    <select id="side"><option value="w">I play White</option><option value="b">I play Black</option></select>
+    <button id="new">New game</button>
+    <span id="status"></span>
   </div>
+  <div id="prog"><i></i></div>
 </div>
 
 <script type="module">
@@ -133,11 +88,9 @@ function render() {
   for (const row of chess.board()) for (const p of row) if (p) board[p.square] = p;
   const moves = sel ? chess.moves({ square: sel, verbose: true }) : [];
   const targets = new Map(moves.map(m => [m.to, m.flags.includes("c") || m.flags.includes("e")]));
-  const inCheck = chess.inCheck();
-  const turn = chess.turn();
-  const list = squares();
+  const inCheck = chess.inCheck(), turn = chess.turn();
   boardEl.innerHTML = "";
-  list.forEach((sq, i) => {
+  squares().forEach((sq, i) => {
     const file = sq.charCodeAt(0) - 97, rank = Number(sq[1]) - 1;
     const d = document.createElement("div");
     d.className = "sq " + ((file + rank) % 2 ? "l" : "d");
@@ -145,18 +98,11 @@ function render() {
     if (sq === sel) d.classList.add("sel");
     if (last && (sq === last.from || sq === last.to)) d.classList.add("last");
     if (inCheck && p && p.type === "k" && p.color === turn) d.classList.add("chk");
-    if (p && p.color === human && chess.turn() === human) d.classList.add("can");
-    if (p) {
-      const s2 = document.createElement("span");
-      s2.className = "piece " + p.color;
-      s2.textContent = GLYPH[p.type];
-      d.appendChild(s2);
-    }
-    if (targets.has(sq)) {
-      const o = document.createElement("i");
-      o.className = targets.get(sq) ? "ring" : "dot";
-      d.appendChild(o);
-    }
+    if (p && p.color === human && turn === human) d.classList.add("can");
+    if (p) { const s = document.createElement("span");
+      s.className = "piece " + p.color; s.textContent = GLYPH[p.type]; d.appendChild(s); }
+    if (targets.has(sq)) { const o = document.createElement("i");
+      o.className = targets.get(sq) ? "ring" : "dot"; d.appendChild(o); }
     if (i >= 56) { const c = document.createElement("span");
       c.className = "coord f"; c.textContent = sq[0]; d.appendChild(c); }
     if (i % 8 === 0) { const c = document.createElement("span");
@@ -164,15 +110,12 @@ function render() {
     d.onclick = () => click(sq);
     boardEl.appendChild(d);
   });
-  $("moves").textContent = chess.history().map((m,i) =>
-    (i % 2 ? "" : `${i/2+1}. `) + m).join(" ");
 }
 
-function say(t) { $("status").innerHTML = t; }
+const say = (t) => { $("status").textContent = t; };
 
 function click(sq) {
   if (busy || chess.turn() !== human || chess.isGameOver()) return;
-  const piece = chess.get(sq);
   if (sel) {
     const mv = chess.moves({ square: sel, verbose: true }).find(m => m.to === sq);
     if (mv) {
@@ -182,6 +125,7 @@ function click(sq) {
       return;
     }
   }
+  const piece = chess.get(sq);
   sel = (piece && piece.color === human) ? sq : null;
   render();
 }
@@ -189,46 +133,35 @@ function click(sq) {
 async function reply() {
   if (chess.isGameOver()) return finish();
   busy = true;
-  const opts = { style: $("style").value, temperature: +$("temp").value, alpha: +$("alpha").value };
-  const { uci, source } = await engine.chooseMove(chess, opts);
-  if (!uci) { say("Still loading the model — one moment."); busy = false; return; }
+  const { uci } = await engine.chooseMove(chess, { style: "stock", temperature: 0.9, alpha: 0 });
+  if (!uci) { say("loading…"); busy = false; return; }
   const mv = chess.move({ from: uci.slice(0,2), to: uci.slice(2,4), promotion: uci[4] || "q" });
   last = { from: mv.from, to: mv.to };
   busy = false; render();
-  say(chess.isGameOver() ? "" : `Played <b>${mv.san}</b><span class="tag">${
-    source === "book" ? "my opening book" : "model"}</span>`);
-  if (chess.isGameOver()) finish();
+  chess.isGameOver() ? finish() : say("your move");
 }
 
 function finish() {
-  const t = chess.isCheckmate() ? (chess.turn() === human ? "I win." : "You win.")
-    : chess.isDraw() ? "Draw." : "Game over.";
-  say(t);
+  say(chess.isCheckmate() ? (chess.turn() === human ? "I win" : "you win")
+    : chess.isDraw() ? "draw" : "game over");
 }
 
 function newGame() {
   chess = new Chess(); human = $("side").value; sel = null; last = null;
-  render();
-  say(engine.ready ? "Your move." : "Your move — the model is still downloading, " +
-      "but my opening book can answer in the meantime.");
+  render(); say("your move");
   if (human === "b") setTimeout(reply, 200);
 }
 
 $("new").onclick = newGame;
 $("side").onchange = newGame;
-$("undo").onclick = () => { chess.undo(); chess.undo(); sel = null; last = null; render(); };
-$("temp").oninput = e => $("tempv").textContent = (+e.target.value).toFixed(2);
-$("alpha").oninput = e => $("alphav").textContent = (+e.target.value).toFixed(2);
 
 (async () => {
   render();
   await engine.loadLight();
-  say("Your move. Opening book ready; model downloading…");
-  const bar = document.querySelector(".bar");
-  bar.classList.add("on");
-  await engine.loadModel(p => { $("prog").style.width = (p*100).toFixed(0) + "%"; });
-  setTimeout(() => bar.classList.remove("on"), 500);
-  say("Ready.");
+  say("your move");
+  const bar = $("prog"); bar.classList.add("on");
+  await engine.loadModel(p => { bar.firstElementChild.style.width = (p*100).toFixed(0) + "%"; });
+  setTimeout(() => bar.classList.remove("on"), 400);
 })();
 </script>
 </body>
