@@ -1,8 +1,9 @@
 // Play-Edward engine: personal opening book in front of Maia-2 (ONNX, in-browser).
 import { boardToTensor, mirrorFen, mirrorMove, N_CHANNELS } from "./maia-encode.js";
+import { Veto } from "./veto.js";
 
-// Shipped in three parts: each stays under GitHub's 25 MB web-upload cap, so the
-// whole site can be published by drag-and-drop without the git command line.
+// Shipped in three parts so each stays under GitHub's upload cap; engine glues
+// them back together before ONNX Runtime ever sees the bytes.
 const MODEL_PARTS = ["./maia2.fp16.onnx.part0", "./maia2.fp16.onnx.part1",
                      "./maia2.fp16.onnx.part2"];
 const META_URL = "./model_meta.json";
@@ -39,6 +40,19 @@ export class Engine {
   constructor() {
     this.session = null; this.meta = null; this.book = null;
     this.moveIndex = null; this.ready = false;
+    this.veto = null; this.vetoReady = false;
+  }
+
+  /** Optional: load the Stockfish veto. Play works without it. */
+  async loadVeto() {
+    try {
+      this.veto = await new Veto().load();
+      this.vetoReady = true;
+    } catch (e) {
+      console.warn("veto unavailable, playing unfiltered:", e.message);
+      this.veto = null; this.vetoReady = false;
+    }
+    return this;
   }
 
   /** Book and metadata are tiny — load them first so play can start at once. */
@@ -89,6 +103,33 @@ export class Engine {
     return out;
   }
 
+  /** Softmax over legal moves, keyed by real (unmirrored) uci. */
+  async policy(fen, chess, { style = "stock", temperature = 0.9, alpha = 0 } = {}) {
+    const ort = window.ort;
+    const white = fen.split(" ")[1] === "w";
+    const boards = boardToTensor(white ? fen : mirrorFen(fen));
+    const out = await this.session.run({
+      boards: new ort.Tensor("float32", boards, [1, N_CHANNELS * 64]),
+      emb_self: new ort.Tensor("float32", this.embedding(alpha, this.meta.his_bin), [1, 128]),
+      elos_oppo: new ort.Tensor("int64", BigInt64Array.from([BigInt(this.meta.his_bin)]), [1]),
+    });
+    const logits = out.policy.data;
+    const weights = STYLES[style] ?? {};
+    const scored = [];
+    for (const m of chess.moves({ verbose: true })) {
+      const uci = uciOf(m);
+      const idx = this.moveIndex.get(white ? uci : mirrorMove(uci));
+      if (idx === undefined) continue;
+      scored.push({ uci, z: logits[idx] + styleBias(m, weights, white) });
+    }
+    const t = Math.max(0.05, temperature);
+    const max = Math.max(...scored.map((s) => s.z));
+    let sum = 0;
+    for (const s of scored) { s.p = Math.exp((s.z - max) / t); sum += s.p; }
+    for (const s of scored) s.p /= sum || 1;
+    return scored;
+  }
+
   async modelMove(fen, chess, { style = "stock", temperature = 0.9, alpha = 0 } = {}) {
     const ort = window.ort;
     const white = fen.split(" ")[1] === "w";
@@ -132,6 +173,28 @@ export class Engine {
     const b = this.bookMove(fen, chess);
     if (b) return { uci: b, source: "book" };
     if (!this.ready) return { uci: null, source: "waiting" };
+
+    const veto = opts?.veto ?? 0;
+    if (veto > 0 && this.vetoReady) {
+      try {
+        const top = await this.veto.topMoves(fen, opts.depth ?? 6);
+        if (top.length) {
+          const cutoff = top[0].cp - veto;
+          const ok = top.filter((m) => m.cp >= cutoff);
+          const pol = await this.policy(fen, chess, opts);
+          const byUci = new Map(pol.map((s) => [s.uci, s.p]));
+          const cand = ok.map((m) => ({ uci: m.uci, p: byUci.get(m.uci) ?? 0 }));
+          const tot = cand.reduce((s, c) => s + c.p, 0);
+          if (tot > 0) {
+            let r = Math.random() * tot;
+            for (const c of cand) { r -= c.p; if (r <= 0) return { uci: c.uci, source: "filtered" }; }
+          }
+          return { uci: ok[0].uci, source: "filtered" };
+        }
+      } catch (e) {
+        console.warn("veto failed for this move, falling back:", e.message);
+      }
+    }
     return { uci: await this.modelMove(fen, chess, opts), source: "model" };
   }
 }

@@ -82,6 +82,27 @@ const boardEl = $("board");
 let chess = new Chess(), engine = new Engine(), human = "w";
 let sel = null, last = null, busy = false;
 
+// Tuning knobs, settable from the URL so visitors never see them:
+//   ?t=0.4          sampling temperature; lower is stronger, ~+200 Elo vs 0.9,
+//                   saturating around 0.4 (measured over 40 self-play games)
+//   ?style=attacking|positional|wild|stock
+//   ?alpha=0.15     0 = pure Edward, up to 0.25 toward a generic 2000 player
+const Q = new URLSearchParams(location.search);
+const num = (k, d, lo, hi) => {
+  const v = parseFloat(Q.get(k));
+  return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d;
+};
+//   ?veto=150       centipawn blunder filter; 0 turns it off
+//   ?depth=6        Stockfish search depth for the filter
+const OPTS = {
+  temperature: num("t", 0.4, 0.02, 2),
+  alpha: num("alpha", 0, 0, 0.25),
+  veto: num("veto", 150, 0, 1000),
+  depth: Math.round(num("depth", 6, 1, 14)),
+  style: ["stock","attacking","positional","wild"].includes(Q.get("style"))
+    ? Q.get("style") : "stock",
+};
+
 function squares() {
   const out = [];
   const ranks = human === "w" ? [8,7,6,5,4,3,2,1] : [1,2,3,4,5,6,7,8];
@@ -140,11 +161,12 @@ function click(sq) {
 async function reply() {
   if (chess.isGameOver()) return finish();
   busy = true;
-  const { uci } = await engine.chooseMove(chess, { style: "stock", temperature: 0.9, alpha: 0 });
+  const { uci, source } = await engine.chooseMove(chess, OPTS);
   if (!uci) { say("loading…"); busy = false; return; }
   const mv = chess.move({ from: uci.slice(0,2), to: uci.slice(2,4), promotion: uci[4] || "q" });
   last = { from: mv.from, to: mv.to };
   busy = false; render();
+  document.body.dataset.source = source;   // handy when tuning
   chess.isGameOver() ? finish() : say("your move");
 }
 
@@ -169,6 +191,7 @@ $("side").onchange = newGame;
   const bar = $("prog"); bar.classList.add("on");
   await engine.loadModel(p => { bar.firstElementChild.style.width = (p*100).toFixed(0) + "%"; });
   setTimeout(() => bar.classList.remove("on"), 400);
+  if (OPTS.veto > 0) await engine.loadVeto();
 })();
 </script>
 </body>
